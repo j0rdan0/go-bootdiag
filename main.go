@@ -2,16 +2,19 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/to"
-	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute/v6"
+
+	"github.com/google/uuid"
+
+	"github.com/fatih/color"
 )
 
 func main() {
@@ -23,31 +26,10 @@ func main() {
 	GetBootDiag(os.Args[1], os.Args[2])
 }
 
-type ClientSecretInfo struct {
-	ClientID     string `json:"ClientID"`
-	TenantID     string `json:"TenantID"`
-	ClientSecret string `json:"ClientSecret`
-}
-
 func GetBootDiag(rg string, vmName string) {
 
-	var creds ClientSecretInfo
-	f, err := os.Open("./appcreds.json")
-	if err != nil {
-		log.Fatalf("failed to open file %s\n", err)
-	}
-	data, err := io.ReadAll(f)
-	if err != nil {
-		log.Fatalf("failed to read file %s\n", err)
-	}
-	err = json.Unmarshal(data, &creds)
-	if err != nil {
-		log.Fatal("failed to unmarshal data %s\n", err)
-	}
-	cred, err := azidentity.NewClientSecretCredential(creds.TenantID, creds.ClientID, creds.ClientSecret, nil)
-	if err != nil {
-		log.Fatalf("failed to obtain a credential: %v", err)
-	}
+	cred, err := AuthenticateClient()
+
 	ctx := context.Background()
 	clientFactory, err := armcompute.NewClientFactory(os.Getenv("AZURE_SUBSCRIPTION_ID"), cred, nil)
 	if err != nil {
@@ -58,24 +40,26 @@ func GetBootDiag(rg string, vmName string) {
 		log.Fatalf("failed to finish the request: %v", err)
 	}
 
-	screenshot := res.RetrieveBootDiagnosticsDataResult.ConsoleScreenshotBlobURI
+	screenshotResponse := res.RetrieveBootDiagnosticsDataResult.ConsoleScreenshotBlobURI
 
-	resp, err := http.Get(*screenshot)
+	resp, err := http.Get(*screenshotResponse)
 	if err != nil {
 		log.Fatalf("failed to get screenshot %s\n", err)
 	}
-	log.Printf("resp code: %s\n", resp.StatusCode)
 	defer resp.Body.Close()
 
-	screenshot_file, err := os.Create("screenshot.jpg")
+	uuid, err := uuid.NewUUID()
+	filename := fmt.Sprintf("screenshots/screenshot_%s.jpg", uuid.String())
+	screenshot_file, err := os.Create(filename)
 	buffer, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Fatalf("failed to get response body %s\n", err)
 	}
-	n, err := screenshot_file.Write(buffer)
+	_, err = screenshot_file.Write(buffer)
 	if err != nil {
 		log.Fatalf("failed to save screenshot %s\n", err)
 	}
-	log.Printf("saved screenshot file with size: %d bytes\n", n)
+
+	color.Blue("[*] saved screenshot file: %s\n", color.RedString(strings.Split(filename, "/")[1]))
 
 }
