@@ -6,3 +6,5 @@ Requirements:
 
 - An Entra ID SP that has Microsoft.Compute/virtualMachines/retrieveBootDiagnosticsData/action permission
 - Viu dependency for viewing the screenshot in terminal: https://github.com/atanunq/viu
+
+
